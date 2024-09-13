@@ -1,0 +1,521 @@
+Function Print-Variables
+{
+  <#
+    .SYNOPSIS
+    Prints the variables and last error 
+    Mattias Borg
+    Onevinn AB
+    https://x.com/mattiasborg82 
+
+    .DESCRIPTION
+    The "Print-Variables" function is used to display the value of a variables set by code to simplify static analysis
+    It will exclude as many default variables as possible
+
+#>
+
+$LastExecution = (get-history)[-1]
+$exclude = @()
+$exclude += "?"
+$exclude += "^"
+$exclude += "args"
+$exclude += "variables"
+$exclude += "r"
+$exclude += "foreach"
+$exclude += "exclude"
+$exclude += "ConfirmPreference"
+$exclude += "ConsoleFileName"
+$exclude += "DebugPreference"
+$exclude += "Error"
+$exclude += "ErrorActionPreference"
+$exclude += "ErrorView"
+$exclude += "ExecutionContext"
+$exclude += "FALSE"
+$exclude += "FormatEnumerationLimit"
+$exclude += "HOME"
+$exclude += "Host"
+$exclude += "InformationPreference"
+$exclude += "input"
+$exclude += "LASTEXITCODE"
+$exclude += "Matches"
+$exclude += "MaximumAliasCount"
+$exclude += "MaximumDriveCount"
+$exclude += "MaximumErrorCount"
+$exclude += "MaximumFunctionCount"
+$exclude += "MaximumHistoryCount"
+$exclude += "MaximumVariableCount"
+$exclude += "MyInvocation"
+$exclude += "NestedPromptLevel"
+$exclude += "null"
+$exclude += "OutputEncoding"
+$exclude += "PID"
+$exclude += "PROFILE"
+$exclude += "ProgressPreference"
+$exclude += "PSBoundParameters"
+$exclude += "PSCommandPath"
+$exclude += "PSCulture"
+$exclude += "PSDefaultParameterValues"
+$exclude += "PSEdition"
+$exclude += "PSEmailServer"
+$exclude += "PSHOME"
+$exclude += "PSScriptRoot"
+$exclude += "PSSessionApplicationName"
+$exclude += "PSSessionConfigurationName"
+$exclude += "PSSessionOption"
+$exclude += "PSUICulture"
+$exclude += "PSVersionTable"
+$exclude += "PWD"
+$exclude += "ShellId"
+$exclude += "StackTrace"
+$exclude += "TRUE"
+$exclude += "VerbosePreference"
+$exclude += "WarningPreference"
+$exclude += "WhatIfPreference"
+$exclude += "$"
+$exclude += "LastExecution"
+$variables = Get-Variable | ?{$_.Name -notin $exclude}
+Write-Host "Last Execution: $($LastExecution.CommandLine)" -ForegroundColor Green
+if($Error.length -gt 0)
+    {
+        Write-host "Last error:`n$($Error)`n"  -foregroundcolor Yellow
+        $Error.Clear()
+    }
+
+
+return $variables
+}
+
+
+function ConvertFrom-Base64 {
+    <#
+.SYNOPSIS
+ConvertFrom-Base64 function converts an Base64 string to a ASCII string.
+Mattias Borg
+Onevinn AB
+https://x.com/mattiasborg82
+.DESCRIPTION
+ConvertFrom-Base64 function converts an Base64 string to a ASCII string.
+.PARAMETER Base64String
+The Base64String string to be converted to ASCII.
+
+.EXAMPLE
+ ConvertFrom-Base64 -Base64String "SGVsbG8="
+#>
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$Base64String
+    )
+    process {
+        $Base64Bytes = [System.Convert]::FromBase64String($Base64String)
+        $UTF8String = [System.Text.Encoding]::UTF8.GetString($Base64Bytes)
+        return $UTF8String
+    }
+}
+function ConvertTo-Base64 {
+        <#
+.SYNOPSIS
+ConvertTo-Base64 function converts an ASCII string to Base64 encoded string.
+Mattias Borg
+Onevinn AB
+https://x.com/mattiasborg82
+.DESCRIPTION
+ConvertTo-Base64 function converts an ASCII string to Base64 encoded string.
+.PARAMETER String
+The Base64String string to be converted to ASCII.
+.EXAMPLE
+ ConvertTo-Base64 -String "Hello"
+#>
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$String
+    )
+    process {
+        $UTF8String = [System.Text.Encoding]::UTF8.GetBytes($String)
+        $Base64String = [System.Convert]::ToBase64String($UTF8String)
+        
+        return $Base64String
+    }
+}
+
+
+   
+function ConvertTo-Binary {
+    <#
+.SYNOPSIS
+ConvertTo-Binary function converts an ASCII string to a binary string.
+Mattias Borg
+Onevinn AB
+https://x.com/mattiasborg82
+.DESCRIPTION
+This function takes an ASCII string as input and converts it to a binary string.
+Each character in the ASCII string is converted to its corresponding binary representation.
+.PARAMETER AsciiString
+The ASCII string to be converted to binary.
+.PARAMETER SeparatedString
+Specifies whether the binary string should be separated by a delimiter.
+.PARAMETER Separator
+The delimiter used to separate the binary string if SeparatedString is set to $true.
+.EXAMPLE
+ConvertTo-Binary -AsciiString "Hello"
+This example converts the ASCII string "Hello" to the binary string "0100100001100101011011000110110001101111"
+ConvertTo-Binary -AsciiString "Hello" -SeparatedString -Separator " "
+This example converts the ASCII string "Hello" to the binary string "01001000 01100101 01101100 01101100 01101111".
+#>
+
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$AsciiString,
+        [Parameter(Mandatory=$false)]
+        [switch]$SeparatedString,
+        [string]$Separator = " "
+    )
+    process {
+        $BinaryString = ""
+        foreach ($char in $AsciiString.ToCharArray()) {
+            $ASCIIValue = [byte][char]$char
+            $BinaryString +=  [Convert]::ToString($ASCIIValue, 2).PadLeft(8, '0')
+        }
+        if ($SeparatedString) {
+            $BinaryString = $BinaryString -split '(.{8})' -ne '' -join $Separator
+        }
+        return $BinaryString 
+        #return $BinaryString -split '(.{8})' -ne '' -join " "
+    }
+}
+
+function ConvertFrom-Binary {
+    <#
+    .SYNOPSIS
+    ConvertFrom-Binary function converts a binary string to an ASCII string.
+    Mattias Borg
+    Onevinn AB
+    https://x.com/mattiasborg82
+    .DESCRIPTION
+    This function takes a binary string as input and converts it to an ASCII string.
+    Each group of 8 bits in the binary string represents an ASCII character.
+    .PARAMETER BinaryString
+    The binary string to be converted to ASCII.
+    .PARAMETER SeparatedString
+    Specifies whether the binary string is separated by a delimiter.
+    .PARAMETER Separator
+    The delimiter used to separate the binary string if SeparatedString is set to $true.
+    .EXAMPLE
+    ConvertFrom-Binary -BinaryString "01001000 01100101 01101100 01101100 01101111"
+    This example converts the binary string "01001000 01100101 01101100 01101100 01101111" to the ASCII string "Hello".
+    #>
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$BinaryString,
+        [Parameter(Mandatory=$false, ValueFromPipeline=$false)]
+        [switch]$SeparatedString,
+        [string]$Separator = " "
+    )
+    process {
+        $ASCIIArray = @()
+        if($BinaryString -match '[^0-1]')
+            {
+
+                Write-Host "`nFound other character than 1 and 0 in the input...`n" -ForegroundColor Yellow
+                $Value = [byte][char]$matches[0]
+                $ASCICharacter = [char]$Value
+                Write-Host "ASCII number:`t`t[$($Value )]" -ForegroundColor Yellow
+                if($Value -eq 32)
+                    {
+                        $ASCICharacter = "Space"
+                        Write-Host "Character found:`t[$($ASCICharacter)]" -ForegroundColor Yellow
+                    }
+                    else
+                        {
+                            Write-Host "Character found:`t[$ASCICharacter]" -ForegroundColor Yellow
+                        }
+
+                $SeparatedString=$true
+                Write-Host "Trying with: [$ASCICharacter] as string delimiter" -ForegroundColor Yellow
+            }
+        if ($SeparatedString)
+            {
+
+                $BinaryArray = $BinaryString -split $Separator
+            
+            }
+            else
+                {
+                    $BinaryArray = $BinaryString -split '(.{8})' -ne ''
+                }
+            foreach ($binary in $BinaryArray) 
+                {
+
+                    $decimal = [Convert]::ToInt32($binary, 2)
+
+                    [char]$ASCIIValue = [char]$decimal
+                    $ASCIIArray += $ASCIIValue 
+        }
+        $ASCIIString = $ASCIIArray -join ''
+        Write-host "Inputconverted to ASCII string:`n" -ForegroundColor Green
+        return $ASCIIString
+    }
+}
+
+function Invoke-ReverseString {
+    <#
+    .SYNOPSIS
+    Invoke-ReverseString function reverses a given string.
+    Mattias Borg
+    Onevinn AB
+    https://x.com/mattiasborg82
+    .DESCRIPTION
+    This function takes a string as input and reverses the order of its characters.
+    
+    .PARAMETER String
+    The string to be reversed.
+    
+    .EXAMPLE
+    Invoke-ReverseString -String "Hello, World!"
+    This example reverses the string "Hello, World!" to "!dlroW ,olleH".
+    #>
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$String
+    )
+    process {
+        $CharArray = $String.ToCharArray()
+        [array]::Reverse($CharArray)
+        $ReversedString = -join $CharArray
+        return $ReversedString
+    }
+}
+
+
+function Decrypt-AES {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$EncryptedText,
+        [Parameter(Mandatory=$true)]
+        [string]$Key,
+        [Parameter(Mandatory=$true)]
+        [string]$InitVector
+    )
+    process {
+        try {
+            $encryptedBytes = [System.Convert]::FromBase64String($EncryptedText)
+            $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
+            $aes.Key = [System.Text.Encoding]::UTF8.GetBytes($Key)
+            $aes.IV = [System.Text.Encoding]::UTF8.GetBytes($IV)
+            $aes.Mode = [System.Security.Cryptography.CipherMode]::CBC
+            $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+
+            $decryptor = $aes.CreateDecryptor($aes.Key, $aes.IV)
+            $memoryStream = New-Object System.IO.MemoryStream($encryptedBytes)
+            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $decryptor, [System.Security.Cryptography.CryptoStreamMode]::Read)
+            $streamReader = New-Object System.IO.StreamReader($cryptoStream)
+            $decryptedText = $streamReader.ReadToEnd()
+
+            $streamReader.Close()
+            $cryptoStream.Close()
+            $memoryStream.Close()
+
+            return $decryptedText
+        }
+        catch {
+            Write-Host "Error occurred during AES decryption: $_" -ForegroundColor Red
+        }
+    }
+}
+
+
+function Encrypt-AES {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$PlainText,
+        [Parameter(Mandatory=$true)]
+        [string]$Key,
+        [Parameter(Mandatory=$true)]
+        [string]$IV
+    )
+    process {
+        try {
+            $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($PlainText)
+            $aes = New-Object System.Security.Cryptography.AesCryptoServiceProvider
+            $aes.Key = [System.Text.Encoding]::UTF8.GetBytes($Key)
+            $aes.IV = [System.Text.Encoding]::UTF8.GetBytes($IV)
+            $aes.Mode = [System.Security.Cryptography.CipherMode]::CBC
+            $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+
+            $encryptor = $aes.CreateEncryptor($aes.Key, $aes.IV)
+            $memoryStream = New-Object System.IO.MemoryStream
+            $cryptoStream = New-Object System.Security.Cryptography.CryptoStream($memoryStream, $encryptor, [System.Security.Cryptography.CryptoStreamMode]::Write)
+            $cryptoStream.Write($plainBytes, 0, $plainBytes.Length)
+            $cryptoStream.FlushFinalBlock()
+
+            $encryptedBytes = $memoryStream.ToArray()
+            $memoryStream.Close()
+            $cryptoStream.Close()
+
+            $encryptedText = [System.Convert]::ToBase64String($encryptedBytes)
+            return $encryptedText
+        }
+        catch {
+            Write-Host "Error occurred during AES encryption: $_" -ForegroundColor Red
+        }
+    }
+}
+
+
+function Invoke-ROT13 {
+            <#
+            .SYNOPSIS
+            Invoke-ROT13 function performs ROT13 chiffer on a given string.
+            Mattias Borg
+            Onevinn AB
+            https://x.com/mattiasborg82
+            .DESCRIPTION
+            This function takes a string as input and performs ROT13 chiffer on the string.
+            Each character in the string is shifted 13 positions in the alphabet.
+            .PARAMETER String
+            The string to be chiffered.
+            .EXAMPLE
+            Invoke-ROT13 -String "Hello, World!"
+            This example encrypts the string "Hello, World!" using ROT13 chiffer.
+            #>
+            function Invoke-ROT13 {
+                param(
+                    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+                    [string]$String,
+                    [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+                    [string]$Steps = 13
+                )
+                process {
+                    $result = ""
+                    foreach ($char in $String.ToCharArray()) {
+                        if ($char -ge 'A' -and $char -le 'Z') {
+                            $result += [char](((($char - 65) + $Steps) % 26) + 65)
+                        } elseif ($char -ge 'a' -and $char -le 'z') {
+                            $result += [char](((($char - 97) + $Steps) % 26) + 97)
+                        } else {
+                            $result += $char
+                        }
+                    }
+                    return $result
+                }
+            }
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$String,
+        [Parameter(Mandatory=$false)]
+        [int]$Steps = 13
+    )
+    process {
+        $result = ""
+        foreach ($char in $String.ToCharArray()) {
+            if ($char -ge 'A' -and $char -le 'Z') {
+                $result += [char](((($char - 65) + $Steps) % 26) + 65)
+            } elseif ($char -ge 'a' -and $char -le 'z') {
+                $result += [char](((($char - 97) + $Steps) % 26) + 97)
+            } else {
+                $result += $char
+            }
+        }
+        return $result
+    }
+}
+
+function Invoke-XOR{
+        <#
+    .SYNOPSIS
+        Invoke-XOR function performs XOR encryption on a given string using a specified key.
+        Mattias Borg
+        Onevinn AB
+        https://x.com/mattiasborg82
+    .DESCRIPTION
+        This function takes a string and a key as input and performs XOR encryption on the string using the key.
+        Each character in the string is XORed with the corresponding character in the key.
+    .PARAMETER String
+        The string to be encrypted.
+    .PARAMETER Key
+        The key to be used for encryption.
+    .EXAMPLE
+        Invoke-XOR -String "Hello, World!" -Key "32"
+        This example encrypts the string "Hello, World!" using the key "32".
+    #>
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$String,
+        [Parameter(Mandatory=$true)]
+        [string]$Key
+    )
+    process {
+        $result = ""
+        $keyIndex = 0
+        for ($i = 0; $i -lt $String.Length; $i++) {
+            $char = $String[$i]
+            $keyChar = $Key[$keyIndex]
+            $xoredChar = [char]([byte]$char -bxor [byte]$keyChar)
+            $result += $xoredChar
+            $keyIndex = ($keyIndex + 1) % $Key.Length
+        }
+        return $result
+    }
+}
+Function Get-MagicBytes {
+    <#
+    .SYNOPSIS
+        Get the magic bytes of a file and determine its file type.
+        Mattias Borg
+        Onevinn AB
+        https://x.com/mattiasborg82
+    .DESCRIPTION
+        This function reads the first 4 bytes of a file and converts them to hexadecimal representation. 
+        It then matches the value with a known list of magic bytes to determine the file type.
+    .PARAMETER FilePath
+        The path to the file.
+    .EXAMPLE
+        Get-MagicBytes -FilePath "C:\path\to\file.jpg"
+        This example retrieves the magic bytes of a JPG file and returns the file type as "JPG".
+    #>
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory=$true)]
+        [string]$FilePath
+    )
+    $magicBytes = Get-Content -Encoding Byte -TotalCount 4 -Path $FilePath
+    $magicBytesHex = $magicBytes | ForEach-Object { "0x{0:X2}" -f $_ }
+    $knownMagicBytes = @{
+        "127797116" = "OfficeX"
+        "137807871" = "PNG"
+        "71737056" = "GIF"
+        "255216255224" = "JPG"
+        "37806870" = "PDF"
+        "807534" = "ZIP"
+        "77901440" = "PE (EXE/DLL)"
+        "20820717224" = "MSG"
+        #I will continue on this list, maybe change to hex to make it easier to use public lists
+
+    }
+
+    $magicBytesObject = [PSCustomObject]@{
+        MagicBytes = $magicBytes -join ","
+        MagicBytesHex = $magicBytesHex -join ","
+        FileType = $knownMagicBytes[($magicBytes -join "")]
+        FileName = (Get-Item $FilePath).Name
+    }
+    return $magicBytesObject
+}
+Function Invoke-MiniBeautifier{
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$InputString
+    )
+    process {
+        $string = $InputString -replace '(\sFunction\s)', $("`n"+'$1')
+        $string = $string -replace '((\{)|(\}))', $("`n`t"+'$1'+ "`n`t`t")
+        $string = $string -replace '(\;)', $("`n")
+        Write-Host $string
+    }
+}
+
+
+Function ConvertFrom-HexToDec{
+	param($HexString)
+	
+	-join ($Hex -split '(..)' | ? { $_ } | % { [char][convert]::ToUInt32($_,16) })
+	
+}
