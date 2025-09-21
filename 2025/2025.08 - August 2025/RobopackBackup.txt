@@ -1,0 +1,198 @@
+<#
+.SYNOPSIS
+    Backup-script til automatisk download og arkivering af de nyeste Robopack-applikationspakker via Robopack API.
+
+.BESKRIVELSE
+    Dette script henter automatisk de nyeste versioner af alle applikationspakker fra Robopack,
+    gemmer dem lokalt i en dagsopdelt mappestruktur, og arkiverer relaterede detection-scripts og info.
+    
+    Til sidst genereres en CSV-log over hentede pakker med relevante metadata.
+
+.KRAV
+    - PowerShell 5.1 eller nyere
+    - Adgang til Robopack API (API key kræves)
+    - Adgang til destinationssti på lokal disk eller netværksdrev
+    - TLS 1.2 aktiveret i PowerShell (sættes i scriptet)
+
+.PARAMETER apiKey
+    Din personlige API-nøgle til Robopack (skal indsættes i scriptet).
+
+.PARAMETER basePath
+    Lokal sti hvor pakker og data skal gemmes. Scriptet opretter en undermappe baseret på dags dato.
+
+.FUNKTIONALITET
+    - Henter alle pakker via Robopack API (paginering håndteres automatisk)
+    - Filtrerer nyeste version af hver unikt produkt
+    - Downloader ZIP-filer for pakker, hvis ikke allerede hentet
+    - Henter detection-script (base64-dekoder og gemmer som .ps1)
+    - Henter yderligere detection-info (fx MSI produktkode, filsti mv.)
+    - Gemmer debug JSON til fejlfinding
+    - Logger alt i CSV med metadata
+    - Dagsopdelt backupstruktur og valgfri sletning af ældre filer kan tilføjes efter behov
+
+.VERSION
+    1.0 – august 2025
+
+.FORFATTER
+    Kenneth Madsen - Aarsleff
+
+.NOTER
+    Husk at konfigurere automatisk kørsel via Task Scheduler, hvis du ønsker daglig backup.
+#>
+
+# --- TLS 1.2 required for RoboPack API ---
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# --- Opsætning ---
+$apiKey = "<indtast API key>"
+$basePath = "I:\RobopackBackup\RoboPackPakker"
+$apiBaseUrl = "https://api.robopack.com/v1"
+
+# Opret dagsmappe
+$todayFolder = Get-Date -Format "dd-MM-yyyy"
+$outputFolder = Join-Path -Path $basePath -ChildPath $todayFolder
+
+if (!(Test-Path -Path $outputFolder)) {
+    New-Item -Path $outputFolder -ItemType Directory | Out-Null
+    Write-Host "✅ Oprettet mappe: $outputFolder"
+} else {
+    Write-Host "ℹ️ Mappe findes allerede: $outputFolder"
+}
+
+# --- Hent alle pakker via paging ---
+$headers = @{ "x-api-key" = $apiKey }
+$allPackages = @()
+$page = 1
+$pageSize = 100
+
+do {
+    $url = "$apiBaseUrl/package?page=$page&pageSize=$pageSize"
+    Write-Host "📦 Henter pakker fra side $page..."
+    try {
+        $response = Invoke-RestMethod -Uri $url -Headers $headers
+        if ($response -and $response.Count -gt 0) {
+            $allPackages += $response
+            $page++
+        } else {
+            break
+        }
+    }
+    catch {
+        Write-Warning -Message ("❌ Fejl ved hentning af side {0}: {1}" -f $page, $_)
+        break
+    }
+} while ($true)
+
+# --- Filtrer nyeste version pr. produkt ---
+$latestPackages = $allPackages |
+    Group-Object -Property productName |
+    ForEach-Object {
+        $_.Group | Sort-Object -Property productVersion -Descending | Select-Object -First 1
+    }
+
+if (-not $latestPackages) {
+    Write-Warning "❌ Ingen pakker fundet!"
+    exit 1
+}
+
+# --- CSV-log ---
+$log = @()
+
+foreach ($package in $latestPackages) {
+    $name      = $package.productName
+    $version   = $package.productVersion
+    $publisher = $package.manufacturer
+    $id        = $package.id
+
+    # Saniter navne
+    $sanitize = { param($s) if ($s) { $s -replace '[\\/:*?"<>|]', '_' -replace '\s+', '_' } else { "Unknown" } }
+    $safePublisher = & $sanitize $publisher
+    $safeName      = & $sanitize $name
+    $safeVersion   = & $sanitize $version
+
+    $fileBaseName = "$safePublisher" + "_" + "$safeName" + "_" + "$safeVersion"
+    $zipFilePath  = Join-Path $outputFolder "$fileBaseName.zip"
+    $detectPs1    = Join-Path $outputFolder "$fileBaseName`_Detect.ps1"
+    $detectTxt    = Join-Path $outputFolder "$fileBaseName`_DetectInfo.txt"
+    $debugJson    = Join-Path $outputFolder "Detectionscript_$fileBaseName.json"
+
+    # --- Download ZIP ---
+    if (!(Test-Path $zipFilePath)) {
+        $downloadUri = "$apiBaseUrl/package/$id/download"
+        try {
+            Write-Host "⬇️  Henter ZIP: $fileBaseName"
+            Invoke-WebRequest -Uri $downloadUri -Headers $headers -OutFile $zipFilePath
+        }
+        catch {
+            Write-Warning -Message ("⚠️  Fejl ved ZIP-download af {0}: {1}" -f $fileBaseName, $_)
+            continue
+        }
+    } else {
+        Write-Host "↪️  ZIP allerede hentet: $fileBaseName"
+    }
+
+    # --- Hent detection-info ---
+    $scriptSaved = $false
+    $txtSaved = $false
+    try {
+        $details = Invoke-RestMethod -Uri "$apiBaseUrl/package/$id" -Method Get -Headers $headers
+
+        # Gem debug JSON
+        $details | ConvertTo-Json -Depth 10 | Set-Content -Path $debugJson -Encoding UTF8
+        Write-Host "📄 Gemte debug JSON: $debugJson"
+
+        # PowerShell detection script
+        if ($details.detectionScript) {
+            $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($details.detectionScript))
+            Set-Content -Path $detectPs1 -Value $decoded -Encoding UTF8
+            Write-Host "📜 Gemte detection script: $fileBaseName`_Detect.ps1"
+            $scriptSaved = $true
+        }
+
+        # Detection-info (MSI, FilePath osv.)
+        $info = @()
+
+        if ($details.msiProductCode -and $details.msiProductCode -ne "") {
+            $info += "MSI ProductCode: $($details.msiProductCode)"
+        }
+        if ($details.msiProductVersion -and $details.msiProductVersion -ne "") {
+            $info += "MSI Version: $($details.msiProductVersion)"
+        }
+        if ($details.detectionFilePath -or $details.detectionFileName -or $details.detectionFileVersion) {
+            if ($details.detectionFilePath)    { $info += "File Path: $($details.detectionFilePath)" }
+            if ($details.detectionFileName)    { $info += "File Name: $($details.detectionFileName)" }
+            if ($details.detectionFileVersion) { $info += "File Version: $($details.detectionFileVersion)" }
+        }
+
+        if ($info.Count -gt 0) {
+            $info | Set-Content -Path $detectTxt -Encoding UTF8
+            Write-Host "📝 Gemte detection info: $fileBaseName`_DetectInfo.txt"
+            $txtSaved = $true
+        } else {
+            Write-Host "ℹ️  Ingen detection info for: $fileBaseName"
+        }
+    }
+    catch {
+        Write-Warning -Message ("⚠️  Fejl ved detection-opslag for {0}: {1}" -f $fileBaseName, $_)
+    }
+
+    # --- Log til CSV ---
+    $log += [PSCustomObject]@{
+        App           = $name
+        Version       = $version
+        Publisher     = $publisher
+        ID            = $id
+        Zip           = Split-Path $zipFilePath -Leaf
+        DetectScript  = if ($scriptSaved) { Split-Path $detectPs1 -Leaf } else { "" }
+        DetectInfoTxt = if ($txtSaved)    { Split-Path $detectTxt -Leaf } else { "" }
+        Timestamp     = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    }
+}
+
+# Gem CSV-log
+$csvPath = Join-Path $outputFolder "RoboPackDetectionLog.csv"
+$log | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+
+Write-Host "`n📄 CSV-log gemt: $csvPath"
+Write-Host "`n✅ Færdig! Alle nyeste pakker og detection-data er gemt i: $outputFolder"
+ 
