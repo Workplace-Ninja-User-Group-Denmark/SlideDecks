@@ -1,6 +1,6 @@
-# Workplace Ninja User Group Denmark — 2026 Slides
+# Workplace Ninja User Group Denmark — Slides
 
-This folder contains **presentation slides from Workplace Ninja User Group Denmark events in 2026**.
+This folder contains **presentation slides from Workplace Ninja User Group Denmark events**.
 
 > **Important:** Slides are only included when the speaker has chosen to share them.  
 > That means **not all sessions will have slides available** in this repository.
