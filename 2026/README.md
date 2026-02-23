@@ -13,7 +13,7 @@ Slides are organized by event/date (and sometimes by session title or speaker na
 
 - `2026-01 - January 2026`
 - `2026-02 - February 2026`
-- `2026-03-??/`
+- `2026-??`
 
 Each event folder may include:
 - Slides (PDF / PPTX)
@@ -62,5 +62,6 @@ Please do not reuse or redistribute material without permission from the author.
 Workplace Ninja User Group Denmark is a community-driven user group focused on Modern Workplace, Microsoft 365, Security, Endpoint Management, Copilot, and related topics.
 
 Learn more and join upcoming events at **https://wpninjas.dk**.
+
 
 
